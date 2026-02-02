@@ -1,10 +1,16 @@
-= GitHub Monthly Report
+= GitHub Activity Reports
 
-A Python script that generates activity reports from GitHub repositories for a specified month.
+Python scripts that generate activity reports from GitHub repositories for specified time periods.
 
-== Description
+== Scripts
 
-This script fetches and summarizes closed pull requests and issues from configured GitHub repositories using the GitHub CLI (`gh`). It provides a comprehensive monthly report showing all closed PRs and issues with their details.
+=== github_monthly_report.py
+
+Fetches and summarizes closed pull requests and issues from configured GitHub repositories using the GitHub CLI (`gh`). It provides a comprehensive monthly report showing all closed PRs and issues with their details.
+
+=== github_weekly_report.py
+
+Fetches pull requests and issues authored by you that were created or closed during a specified week. Shows your personal activity across all repositories where you're a contributor.
 
 == Prerequisites
 
@@ -37,6 +43,8 @@ REPOSITORIES = [
 
 == Usage
 
+=== Monthly Report
+
 Run the script with a month in `YYYY-MM` format:
 
 [source,bash]
@@ -51,7 +59,7 @@ Or using Python directly:
 python3 github_monthly_report.py 2026-01
 ----
 
-=== Example
+==== Example
 
 To generate a report for January 2026:
 
@@ -60,9 +68,50 @@ To generate a report for January 2026:
 ./github_monthly_report.py 2026-01
 ----
 
+=== Weekly Report
+
+Run without arguments to get last week's activity (Monday-Sunday):
+
+[source,bash]
+----
+./github_weekly_report.py
+----
+
+Or specify a week using any date within that week:
+
+[source,bash]
+----
+./github_weekly_report.py --week 2026-01-20
+----
+
+Or using Python directly:
+
+[source,bash]
+----
+python3 github_weekly_report.py --week 2026-01-20
+----
+
+==== Example
+
+To generate a report for last week:
+
+[source,bash]
+----
+./github_weekly_report.py
+----
+
+To generate a report for a specific week (e.g., the week containing January 20, 2026):
+
+[source,bash]
+----
+./github_weekly_report.py --week 2026-01-20
+----
+
 == Output
 
-The script generates a detailed report containing:
+=== Monthly Report Output
+
+The monthly report generates a detailed report containing:
 
 * Summary statistics (total PRs, issues, and repositories)
 * Per-repository breakdown showing:
@@ -70,6 +119,18 @@ The script generates a detailed report containing:
 ** Closed issues
 ** Links to each PR/issue
 ** Closure dates
+
+=== Weekly Report Output
+
+The weekly report generates a personalized activity report containing:
+
+* Summary statistics (total PRs and issues)
+* Per-repository breakdown showing:
+** Pull requests you created or closed during the week
+** Issues you created or closed during the week
+** State of each item (OPEN, CLOSED, MERGED)
+** Creation and closure dates
+** Links to each PR/issue
 
 == Features
 
