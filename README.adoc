@@ -1,0 +1,106 @@
+= GitHub Monthly Report
+
+A Python script that generates activity reports from GitHub repositories for a specified month.
+
+== Description
+
+This script fetches and summarizes closed pull requests and issues from configured GitHub repositories using the GitHub CLI (`gh`). It provides a comprehensive monthly report showing all closed PRs and issues with their details.
+
+== Prerequisites
+
+* Python 3.6 or higher
+* GitHub CLI (`gh`) installed and authenticated
+
+=== Installing GitHub CLI
+
+Visit https://cli.github.com/ for installation instructions.
+
+After installation, authenticate with:
+
+[source,bash]
+----
+gh auth login
+----
+
+== Configuration
+
+Before running the script, edit `github_monthly_report.py` and configure the `REPOSITORIES` list with the repositories you want to track:
+
+[source,python]
+----
+REPOSITORIES = [
+    "owner/repo1",
+    "owner/repo2",
+    # Add more repositories as needed
+]
+----
+
+== Usage
+
+Run the script with a month in `YYYY-MM` format:
+
+[source,bash]
+----
+./github_monthly_report.py 2026-01
+----
+
+Or using Python directly:
+
+[source,bash]
+----
+python3 github_monthly_report.py 2026-01
+----
+
+=== Example
+
+To generate a report for January 2026:
+
+[source,bash]
+----
+./github_monthly_report.py 2026-01
+----
+
+== Output
+
+The script generates a detailed report containing:
+
+* Summary statistics (total PRs, issues, and repositories)
+* Per-repository breakdown showing:
+** Closed pull requests with merge status
+** Closed issues
+** Links to each PR/issue
+** Closure dates
+
+== Features
+
+* Fetches up to 1000 PRs and issues per repository
+* Filters results by closure date within the specified month
+* Distinguishes between merged and closed (unmerged) pull requests
+* Provides clickable links to each PR and issue
+* Shows formatted dates for easy reading
+
+== Troubleshooting
+
+=== GitHub CLI not authenticated
+
+If you see an authentication error, run:
+
+[source,bash]
+----
+gh auth status
+----
+
+If not authenticated, run:
+
+[source,bash]
+----
+gh auth login
+----
+
+=== No repositories configured
+
+Edit the script and add repositories to the `REPOSITORIES` list at the top of the file.
+
+=== Invalid month format
+
+Ensure you use the `YYYY-MM` format (e.g., `2026-01` for January 2026).
