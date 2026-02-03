@@ -10,7 +10,7 @@ import argparse
 import json
 import subprocess
 import sys
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import List, Dict, Any
 
 
@@ -21,45 +21,50 @@ def parse_arguments():
     )
     parser.add_argument(
         "--week",
-        help="Week to query (format: YYYY-MM-DD for the Monday of that week). "
-        "If not provided, defaults to last week (Monday-Sunday).",
+        type=int,
+        help="Week number (1-53). Requires --year.",
+    )
+    parser.add_argument(
+        "--year",
+        type=int,
+        help="Year (e.g., 2026). Requires --week.",
     )
     return parser.parse_args()
 
 
-def get_week_range(week_str: str = None) -> tuple:
+def get_week_range(week_num: int = None, year: int = None) -> tuple:
     """
     Calculate the start and end dates for a week.
 
     Args:
-        week_str: Optional date string in format YYYY-MM-DD (should be a Monday).
-                 If None, uses last week.
+        week_num: Optional week number (1-53).
+        year: Optional year (used with week_num).
+        If both are None, uses last week.
 
     Returns:
         Tuple of (start_date, end_date, week_description)
     """
-    if week_str:
-        try:
-            # Parse the provided date
-            provided_date = datetime.strptime(week_str, "%Y-%m-%d")
-            # Find the Monday of that week
-            days_since_monday = provided_date.weekday()
-            start_date = provided_date - timedelta(days=days_since_monday)
-        except ValueError:
-            print(f"Error: Invalid date format '{week_str}'. Use YYYY-MM-DD.")
-            sys.exit(1)
+    if week_num is not None and year is not None:
+        # Calculate the Monday of the specified week number
+        # Week 1 is the first week with a Thursday in the year (ISO 8601)
+        jan_4 = datetime(year, 1, 4)
+        # Find the Monday of week 1
+        week_1_monday = jan_4 - timedelta(days=jan_4.weekday())
+        # Calculate the Monday of the requested week
+        start_date = week_1_monday + timedelta(weeks=week_num - 1)
     else:
         # Default to last week (Monday to Sunday)
-        today = datetime.now()
-        # Find last Monday
+        today = datetime.now(timezone.utc).date()
+        # Find this week's Monday
         days_since_monday = today.weekday()
-        last_monday = today - timedelta(days=days_since_monday + 7)
-        start_date = last_monday
+        this_monday = today - timedelta(days=days_since_monday)
+        # Go back one week to get last Monday
+        start_date = datetime.combine(this_monday - timedelta(days=7), datetime.min.time())
 
     # Week runs Monday to Sunday
     end_date = start_date + timedelta(days=7)
     
-    week_description = f"{start_date.strftime('%Y-%m-%d')} to {(end_date - timedelta(days=1)).strftime('%Y-%m-%d')}"
+    week_description = f"{start_date.strftime('%Y %b %d')} to {(end_date - timedelta(days=1)).strftime('%Y %b %d')}"
     
     return start_date, end_date, week_description
 
@@ -140,6 +145,8 @@ def search_user_activity(
                     include_item = True
             
             if include_item:
+                # Add item type to each item
+                item["item_type"] = item_type
                 filtered_items.append(item)
         
         return filtered_items
@@ -152,15 +159,16 @@ def search_user_activity(
         return []
 
 
-def generate_report(username: str, week_str: str = None) -> None:
+def generate_report(username: str, week_num: int = None, year: int = None) -> None:
     """
     Generate and print a weekly activity report.
 
     Args:
         username: GitHub username
-        week_str: Optional week string in format YYYY-MM-DD
+        week_num: Optional week number
+        year: Optional year
     """
-    start_date, end_date, week_description = get_week_range(week_str)
+    start_date, end_date, week_description = get_week_range(week_num, year)
 
     print(f"\n{'=' * 70}")
     print(f"GitHub Weekly Activity Report - {username}")
@@ -175,85 +183,56 @@ def generate_report(username: str, week_str: str = None) -> None:
     # Fetch issues (filtered by created or closed date)
     issues = search_user_activity(username, start_date, end_date, "issue")
 
+    # Combine all items into a single list
+    all_items = prs + issues
+
     # Print summary
     print(f"{'─' * 70}")
     print("SUMMARY")
     print(f"{'─' * 70}")
     print(f"Total Pull Requests: {len(prs)}")
     print(f"Total Issues: {len(issues)}")
-    print(f"Total Items: {len(prs) + len(issues)}\n")
+    print(f"Total Items: {len(all_items)}\n")
 
-    # Group by repository
-    repo_data = {}
-    for pr in prs:
-        repo_name = pr["repository"]["nameWithOwner"]
-        if repo_name not in repo_data:
-            repo_data[repo_name] = {"prs": [], "issues": []}
-        repo_data[repo_name]["prs"].append(pr)
-
-    for issue in issues:
-        repo_name = issue["repository"]["nameWithOwner"]
-        if repo_name not in repo_data:
-            repo_data[repo_name] = {"prs": [], "issues": []}
-        repo_data[repo_name]["issues"].append(issue)
-
-    # Print detailed results per repository
-    for repo_name in sorted(repo_data.keys()):
-        repo_prs = repo_data[repo_name]["prs"]
-        repo_issues = repo_data[repo_name]["issues"]
+    if not all_items:
+        print("No activity found for this week.")
+    else:
+        # Sort by repository first, then by creation date within each repo
+        sorted_items = sorted(all_items, key=lambda x: (x["repository"]["nameWithOwner"], -datetime.strptime(x["createdAt"], "%Y-%m-%dT%H:%M:%SZ").timestamp()))
 
         print(f"\n{'=' * 70}")
-        print(f"Repository: {repo_name}")
-        print(f"{'=' * 70}")
+        print("ACTIVITY")
+        print(f"{'=' * 70}\n")
 
-        if repo_prs:
-            print(f"\n📌 Pull Requests ({len(repo_prs)}):")
-            print(f"{'-' * 70}")
-            for pr in sorted(repo_prs, key=lambda x: x["createdAt"], reverse=True):
-                created_date = datetime.strptime(
-                    pr["createdAt"], "%Y-%m-%dT%H:%M:%SZ"
+        current_repo = None
+        for item in sorted_items:
+            created_date = datetime.strptime(
+                item["createdAt"], "%Y-%m-%dT%H:%M:%SZ"
+            )
+            state = item["state"].upper()
+            repo_name = item["repository"]["nameWithOwner"]
+            item_type = "PR" if item["item_type"] == "pr" else "Issue"
+
+            # Print repository header when it changes
+            if current_repo != repo_name:
+                if current_repo is not None:
+                    print()  # Add spacing between repos
+                print(f"Repository: {repo_name}")
+                print(f"{'-' * 70}")
+                current_repo = repo_name
+
+            print(f"  • [{item_type}] #{item['number']}: {item['title']}")
+            print(f"    Status: {state}")
+            print(f"    Created: {created_date.strftime('%Y %b %d')}")
+            
+            if item.get("closedAt") and not item["closedAt"].startswith("0001-01-01"):
+                closed_date = datetime.strptime(
+                    item["closedAt"], "%Y-%m-%dT%H:%M:%SZ"
                 )
-                state = pr["state"].upper()
-                status = f" [{state}]"
-
-                print(f"  • #{pr['number']}: {pr['title']}{status}")
-                print(f"    Created: {created_date.strftime('%Y-%m-%d')}")
-                
-                if pr.get("closedAt") and not pr["closedAt"].startswith("0001-01-01"):
-                    closed_date = datetime.strptime(
-                        pr["closedAt"], "%Y-%m-%dT%H:%M:%SZ"
-                    )
-                    print(f"    Closed: {closed_date.strftime('%Y-%m-%d')}")
-                
-                print(f"    Link: {pr['url']}")
-                print()
-
-        if repo_issues:
-            print(f"🔧 Issues ({len(repo_issues)}):")
-            print(f"{'-' * 70}")
-            for issue in sorted(
-                repo_issues, key=lambda x: x["createdAt"], reverse=True
-            ):
-                created_date = datetime.strptime(
-                    issue["createdAt"], "%Y-%m-%dT%H:%M:%SZ"
-                )
-                state = issue["state"].upper()
-                status = f" [{state}]"
-
-                print(f"  • #{issue['number']}: {issue['title']}{status}")
-                print(f"    Created: {created_date.strftime('%Y-%m-%d')}")
-                
-                if issue.get("closedAt") and not issue["closedAt"].startswith("0001-01-01"):
-                    closed_date = datetime.strptime(
-                        issue["closedAt"], "%Y-%m-%dT%H:%M:%SZ"
-                    )
-                    print(f"    Closed: {closed_date.strftime('%Y-%m-%d')}")
-                
-                print(f"    Link: {issue['url']}")
-                print()
-
-    if not repo_data:
-        print("No activity found for this week.")
+                print(f"    Closed: {closed_date.strftime('%Y %b %d')}")
+            
+            print(f"    Link: {item['url']}")
+            print()
 
     print(f"\n{'=' * 70}")
     print("Report generation complete!")
@@ -263,6 +242,11 @@ def generate_report(username: str, week_str: str = None) -> None:
 def main():
     """Main entry point."""
     args = parse_arguments()
+
+    # Validate arguments
+    if (args.week is not None and args.year is None) or (args.year is not None and args.week is None):
+        print("Error: --week and --year must be used together")
+        sys.exit(1)
 
     # Check if gh CLI is installed and authenticated
     if not check_gh_installed():
@@ -274,7 +258,7 @@ def main():
     # Get current user
     username = get_current_user()
 
-    generate_report(username, args.week)
+    generate_report(username, args.week, args.year)
 
 
 if __name__ == "__main__":
